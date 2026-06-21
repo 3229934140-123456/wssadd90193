@@ -208,56 +208,163 @@ function parseTripCsv(content: string): ParseResult<TripFileData> {
 
   const headers = headerLine.split(',').map(h => h.trim().toLowerCase())
 
+  const tripIdIdx = Math.max(headers.indexOf('tripid'), headers.indexOf('id'))
+  const vehiclePlateIdx = headers.indexOf('vehicleplate')
+  const routeIdx = headers.indexOf('route')
+  const targetTempIdx = headers.indexOf('targettemp')
   const timeIdx = headers.indexOf('time')
   const modeIdx = headers.indexOf('coolingmode')
   const fuelIdx = headers.indexOf('fuellevel')
   const batteryIdx = headers.indexOf('batterylevel')
   const speedIdx = headers.indexOf('speed')
-  const tempIdx = headers.indexOf('compartmenttemp')
+  const tempIdx = Math.max(headers.indexOf('compartmenttemp'), headers.indexOf('temp'))
   const outsideIdx = headers.indexOf('outsidetemp')
   const doorIdx = headers.indexOf('dooropen')
+  const nodeTypeIdx = headers.indexOf('nodetype')
+  const nodeLabelIdx = headers.indexOf('nodelabel')
 
+  if (tripIdIdx === -1) {
+    errors.push('CSV 文件缺少必需列：tripId（行程编号）')
+  }
+  if (vehiclePlateIdx === -1) {
+    errors.push('CSV 文件缺少必需列：vehiclePlate（车牌号）')
+  }
+  if (routeIdx === -1) {
+    errors.push('CSV 文件缺少必需列：route（运输路线）')
+  }
+  if (targetTempIdx === -1) {
+    errors.push('CSV 文件缺少必需列：targetTemp（目标温度）')
+  }
   if (timeIdx === -1) {
-    errors.push('CSV 文件缺少必需列：time')
+    errors.push('CSV 文件缺少必需列：time（时间）')
   }
   if (modeIdx === -1) {
-    errors.push('CSV 文件缺少必需列：coolingMode')
+    errors.push('CSV 文件缺少必需列：coolingMode（制冷模式）')
   }
   if (fuelIdx === -1) {
-    errors.push('CSV 文件缺少必需列：fuelLevel')
+    errors.push('CSV 文件缺少必需列：fuelLevel（油量）')
   }
   if (batteryIdx === -1) {
-    errors.push('CSV 文件缺少必需列：batteryLevel')
+    errors.push('CSV 文件缺少必需列：batteryLevel（电量）')
   }
   if (speedIdx === -1) {
-    errors.push('CSV 文件缺少必需列：speed')
+    errors.push('CSV 文件缺少必需列：speed（车速）')
   }
 
   if (errors.length > 0) {
     return { success: false, errors, warnings }
   }
 
+  if (nodeTypeIdx === -1) {
+    errors.push('CSV 文件缺少节点信息列：nodeType、nodeLabel，无法标记装货/发车/停靠等关键节点')
+    return { success: false, errors, warnings }
+  }
+
   const telemetry: TelemetryPoint[] = []
+  const nodes: TripNode[] = []
+  let tripId = ''
+  let vehiclePlate = ''
+  let route = ''
+  let targetTemp: number | null = null
 
   for (let i = 0; i < dataLines.length; i++) {
     const values = dataLines[i].split(',').map(v => v.trim())
+
+    if (i === 0) {
+      tripId = values[tripIdIdx] || ''
+      vehiclePlate = values[vehiclePlateIdx] || ''
+      route = values[routeIdx] || ''
+      const rawTargetTemp = Number(values[targetTempIdx])
+      targetTemp = isNaN(rawTargetTemp) ? null : rawTargetTemp
+    }
+
     const time = normalizeTimestamp(values[timeIdx])
     if (time === null) {
       errors.push(`第 ${i + 2} 行的 time 格式不正确`)
       continue
     }
 
+    const mode = values[modeIdx]
+    const validModes: CoolingMode[] = ['diesel', 'electric', 'standby', 'off']
+    if (!validModes.includes(mode as CoolingMode)) {
+      errors.push(`第 ${i + 2} 行的 coolingMode "${mode}" 无效，有效值为: ${validModes.join(', ')}`)
+      continue
+    }
+
+    const fuel = Number(values[fuelIdx])
+    if (isNaN(fuel)) {
+      errors.push(`第 ${i + 2} 行的 fuelLevel 不是有效数字`)
+      continue
+    }
+
+    const battery = Number(values[batteryIdx])
+    if (isNaN(battery)) {
+      errors.push(`第 ${i + 2} 行的 batteryLevel 不是有效数字`)
+      continue
+    }
+
+    const speed = Number(values[speedIdx])
+    if (isNaN(speed)) {
+      errors.push(`第 ${i + 2} 行的 speed 不是有效数字`)
+      continue
+    }
+
+    const compartmentTemp = tempIdx !== -1 ? Number(values[tempIdx]) : undefined
+    const outsideTemp = outsideIdx !== -1 ? Number(values[outsideIdx]) : undefined
+    const doorOpen = doorIdx !== -1 ? (values[doorIdx] === 'true' || values[doorIdx] === '1') : false
+
+    if (compartmentTemp !== undefined && isNaN(compartmentTemp)) {
+      warnings.push(`第 ${i + 2} 行的厢温数据无效，该点温度将从相邻数据插值`)
+    }
+
     telemetry.push({
       time,
-      compartmentTemp: tempIdx !== -1 ? Number(values[tempIdx]) : 0,
-      outsideTemp: outsideIdx !== -1 ? Number(values[outsideIdx]) : 25,
-      fuelLevel: Number(values[fuelIdx]),
-      batteryLevel: Number(values[batteryIdx]),
-      coolingMode: values[modeIdx] as CoolingMode,
-      doorOpen: doorIdx !== -1 ? values[doorIdx] === 'true' || values[doorIdx] === '1' : false,
-      speed: Number(values[speedIdx]),
+      compartmentTemp: compartmentTemp !== undefined && !isNaN(compartmentTemp) ? compartmentTemp : 0,
+      outsideTemp: outsideTemp !== undefined && !isNaN(outsideTemp) ? outsideTemp : 25,
+      fuelLevel: fuel,
+      batteryLevel: battery,
+      coolingMode: mode as CoolingMode,
+      doorOpen,
+      speed,
       coolingPower: 0
     })
+
+    if (nodeTypeIdx !== -1 && values[nodeTypeIdx]) {
+      const nodeType = values[nodeTypeIdx]
+      const nodeLabel = nodeLabelIdx !== -1 ? values[nodeLabelIdx] : nodeType
+      const validNodeTypes: TripNodeType[] = ['loading', 'departure', 'service', 'unloading', 'arrival']
+      if (validNodeTypes.includes(nodeType as TripNodeType)) {
+        nodes.push({
+          id: `node-${i}`,
+          type: nodeType as TripNodeType,
+          time,
+          label: nodeLabel || nodeType
+        })
+      } else {
+        warnings.push(`第 ${i + 2} 行的 nodeType "${nodeType}" 不是标准类型`)
+      }
+    }
+  }
+
+  if (errors.length > 0) {
+    return { success: false, errors, warnings }
+  }
+
+  if (!tripId || tripId.trim() === '') {
+    errors.push('行程编号 (tripId) 不能为空')
+  }
+  if (!vehiclePlate || vehiclePlate.trim() === '') {
+    errors.push('车牌号 (vehiclePlate) 不能为空')
+  }
+  if (!route || route.trim() === '') {
+    errors.push('运输路线 (route) 不能为空')
+  }
+  if (targetTemp === null || isNaN(targetTemp)) {
+    errors.push('目标温度 (targetTemp) 无效')
+  }
+
+  if (nodes.length === 0) {
+    errors.push('未找到任何节点数据，请在 CSV 中通过 nodeType 列标记装货、发车、卸货等节点')
   }
 
   if (errors.length > 0) {
@@ -265,23 +372,26 @@ function parseTripCsv(content: string): ParseResult<TripFileData> {
   }
 
   telemetry.sort((a, b) => a.time - b.time)
+  nodes.sort((a, b) => a.time - b.time)
+
+  const departureTime = telemetry[0].time
+  const arrivalTime = telemetry[telemetry.length - 1].time
 
   const data: TripFileData = {
-    id: `trip-${Date.now()}`,
-    vehicleId: 'unknown',
-    vehiclePlate: '未知车牌',
-    route: '未知路线',
-    departureTime: telemetry[0].time,
-    arrivalTime: telemetry[telemetry.length - 1].time,
-    targetTemp: -18,
-    nodes: [
-      { id: 'n-departure', type: 'departure', time: telemetry[0].time, label: '发车' },
-      { id: 'n-arrival', type: 'arrival', time: telemetry[telemetry.length - 1].time, label: '到达' }
-    ],
+    id: tripId,
+    vehicleId: vehiclePlate,
+    vehiclePlate,
+    route,
+    departureTime,
+    arrivalTime,
+    targetTemp: targetTemp!,
+    nodes,
     telemetry
   }
 
-  warnings.push('CSV 格式仅包含遥测数据，车辆信息和节点信息使用默认值，建议使用 JSON 格式以获得完整数据')
+  if (tempIdx === -1) {
+    warnings.push('CSV 文件中缺少厢温数据 (compartmentTemp)，建议上传温度记录文件以获得更准确的分析')
+  }
 
   return { success: true, data, errors, warnings }
 }

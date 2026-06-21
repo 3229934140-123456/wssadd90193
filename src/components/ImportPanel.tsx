@@ -23,6 +23,7 @@ const ImportPanel: React.FC<ImportPanelProps> = ({ onTripLoaded, onLoadDemo }) =
   const [isLoading, setIsLoading] = useState(false)
   const [tripFileData, setTripFileData] = useState<TripFileData | null>(null)
   const [tempRecords, setTempRecords] = useState<TempRecord[] | null>(null)
+  const [timeMatchError, setTimeMatchError] = useState<string | null>(null)
 
   const handleSelectTripFile = async () => {
     let fileData: { fileName: string; content: string } | null = null
@@ -75,9 +76,48 @@ const ImportPanel: React.FC<ImportPanelProps> = ({ onTripLoaded, onLoadDemo }) =
 
     if (result.success && result.data) {
       setTripFileData(result.data)
+      checkTimeMatch(result.data, tempRecords)
     } else {
       setTripFileData(null)
+      setTimeMatchError(null)
     }
+  }
+
+  const checkTimeMatch = (trip: TripFileData | null, temps: TempRecord[] | null) => {
+    if (!trip || !temps || temps.length === 0) {
+      setTimeMatchError(null)
+      return
+    }
+
+    const tripStart = trip.departureTime
+    const tripEnd = trip.arrivalTime
+    const tempStart = temps[0].time
+    const tempEnd = temps[temps.length - 1].time
+
+    const overlapStart = Math.max(tripStart, tempStart)
+    const overlapEnd = Math.min(tripEnd, tempEnd)
+    const overlapDuration = overlapEnd - overlapStart
+    const tripDuration = tripEnd - tripStart
+
+    if (overlapDuration <= 0) {
+      const tripDate = new Date(tripStart).toLocaleDateString()
+      const tempDate = new Date(tempStart).toLocaleDateString()
+      setTimeMatchError(
+        `温度记录与行程时间完全不重叠。行程时间：${tripDate}，温度记录时间：${tempDate}。请检查两份文件是否匹配。`
+      )
+      return
+    }
+
+    const overlapRatio = overlapDuration / tripDuration
+    if (overlapRatio < 0.5) {
+      const overlapPercent = Math.round(overlapRatio * 100)
+      setTimeMatchError(
+        `温度记录仅覆盖了行程的 ${overlapPercent}%，可能不是同一趟运输的数据。建议核对文件后重新选择。`
+      )
+      return
+    }
+
+    setTimeMatchError(null)
   }
 
   const handleSelectTempFile = async () => {
@@ -131,8 +171,10 @@ const ImportPanel: React.FC<ImportPanelProps> = ({ onTripLoaded, onLoadDemo }) =
 
     if (result.success && result.data) {
       setTempRecords(result.data)
+      checkTimeMatch(tripFileData, result.data)
     } else {
       setTempRecords(null)
+      setTimeMatchError(null)
     }
   }
 
@@ -178,16 +220,18 @@ const ImportPanel: React.FC<ImportPanelProps> = ({ onTripLoaded, onLoadDemo }) =
     }
   }
 
-  const canStart = tripFile?.valid === true
+  const canStart = tripFile?.valid === true && tempFile?.valid !== false && timeMatchError === null
 
   const clearTripFile = () => {
     setTripFile(null)
     setTripFileData(null)
+    setTimeMatchError(null)
   }
 
   const clearTempFile = () => {
     setTempFile(null)
     setTempRecords(null)
+    setTimeMatchError(null)
   }
 
   return (
@@ -322,6 +366,13 @@ const ImportPanel: React.FC<ImportPanelProps> = ({ onTripLoaded, onLoadDemo }) =
               </div>
             )}
 
+            {timeMatchError && (
+              <div className="time-match-error error-box">
+                <div className="error-title">⏱ 时间范围不匹配</div>
+                <p>{timeMatchError}</p>
+              </div>
+            )}
+
             {!tempFile && tripFile?.valid && (
               <div className="temp-notice info-box">
                 <div className="info-title">💡 提示</div>
@@ -385,6 +436,9 @@ const ImportPanel: React.FC<ImportPanelProps> = ({ onTripLoaded, onLoadDemo }) =
   "nodes": [...],
   "telemetry": [...]
 }`}</pre>
+              <p><strong>行程文件 (CSV) - 必需列：</strong></p>
+              <pre>tripId,vehiclePlate,route,targetTemp,time,\ncoolingMode,fuelLevel,batteryLevel,speed,\nnodeType,nodeLabel,compartmentTemp</pre>
+              <p className="guide-note">在节点对应的行填写 nodeType（如 departure/arrival）和 nodeLabel 来标记关键节点。</p>
               <p><strong>温度记录 (CSV):</strong></p>
               <pre>time,compartmentTemp,outsideTemp
 1705000000,-18.2,25.3
