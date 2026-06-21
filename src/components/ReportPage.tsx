@@ -129,6 +129,28 @@ const ReportPage: React.FC<ReportPageProps> = ({ tripData, report, onBack, onGoH
           </div>
         </div>
 
+        <div className={`temp-data-source-card temp-source-${report.tempDataInfo.source}`}>
+          <div className="temp-source-header">
+            <span className="temp-source-icon">🌡</span>
+            <div>
+              <div className="temp-source-title">温度数据来源</div>
+              <div className="temp-source-type">
+                {report.tempDataInfo.source === 'separate_file' ? '独立温度文件 ✓' :
+                 report.tempDataInfo.source === 'trip_builtin' ? '行程文件自带温度 ⚠' :
+                 '独立温度文件（部分区间未匹配） ⚠'}
+              </div>
+            </div>
+            <div className="temp-source-coverage">
+              <div className="coverage-label">数据匹配</div>
+              <div className="coverage-value">{report.tempDataInfo.matchedPoints} / {report.tempDataInfo.totalPoints}</div>
+            </div>
+          </div>
+          <div className="temp-source-description">{report.tempDataInfo.description}</div>
+          {report.tempDataInfo.fileName && (
+            <div className="temp-source-filename">文件：{report.tempDataInfo.fileName}</div>
+          )}
+        </div>
+
         <div className="report-details">
           <div className="improvements-section">
             <div className="section-header">

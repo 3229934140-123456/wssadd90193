@@ -1,29 +1,54 @@
-import React, { useState } from 'react'
-import type { TripData } from '../types'
+import React, { useState, useEffect } from 'react'
+import type { TripData, TempDataInfo } from '../types'
 import { parseTripFile, generateSegments, type ParseResult, type TripFileData } from '../utils/tripParser'
 import { parseTemperatureFile, mergeTemperatureData, type TempRecord } from '../utils/tempParser'
 
-interface ImportPanelProps {
-  onTripLoaded: (data: TripData) => void
-  onLoadDemo: () => void
-}
-
-interface FileInfo {
+interface SavedFileState {
   name: string
   size: string
-  content: string
-  valid?: boolean
+  valid: boolean
   errors?: string[]
   warnings?: string[]
 }
 
-const ImportPanel: React.FC<ImportPanelProps> = ({ onTripLoaded, onLoadDemo }) => {
-  const [tripFile, setTripFile] = useState<FileInfo | null>(null)
-  const [tempFile, setTempFile] = useState<FileInfo | null>(null)
+interface SavedImportState {
+  tripFile: SavedFileState | null
+  tempFile: SavedFileState | null
+  tripFileData: TripFileData | null
+  tempRecords: TempRecord[] | null
+  timeMatchError: string | null
+}
+
+interface ImportPanelProps {
+  onTripLoaded: (data: TripData) => void
+  onLoadDemo: () => void
+  savedState?: SavedImportState | null
+  onStateChange?: (state: SavedImportState) => void
+}
+
+interface FileInfo extends SavedFileState {
+  content?: string
+}
+
+const ImportPanel: React.FC<ImportPanelProps> = ({ onTripLoaded, onLoadDemo, savedState, onStateChange }) => {
+  const [tripFile, setTripFile] = useState<FileInfo | null>(savedState?.tripFile ?? null)
+  const [tempFile, setTempFile] = useState<FileInfo | null>(savedState?.tempFile ?? null)
   const [isLoading, setIsLoading] = useState(false)
-  const [tripFileData, setTripFileData] = useState<TripFileData | null>(null)
-  const [tempRecords, setTempRecords] = useState<TempRecord[] | null>(null)
-  const [timeMatchError, setTimeMatchError] = useState<string | null>(null)
+  const [tripFileData, setTripFileData] = useState<TripFileData | null>(savedState?.tripFileData ?? null)
+  const [tempRecords, setTempRecords] = useState<TempRecord[] | null>(savedState?.tempRecords ?? null)
+  const [timeMatchError, setTimeMatchError] = useState<string | null>(savedState?.timeMatchError ?? null)
+
+  useEffect(() => {
+    if (onStateChange) {
+      onStateChange({
+        tripFile: tripFile ?? null,
+        tempFile: tempFile ?? null,
+        tripFileData,
+        tempRecords,
+        timeMatchError
+      })
+    }
+  }, [tripFile, tempFile, tripFileData, tempRecords, timeMatchError, onStateChange])
 
   const handleSelectTripFile = async () => {
     let fileData: { fileName: string; content: string } | null = null
@@ -186,13 +211,21 @@ const ImportPanel: React.FC<ImportPanelProps> = ({ onTripLoaded, onLoadDemo }) =
     try {
       let telemetry = [...tripFileData.telemetry]
       const allWarnings: string[] = []
+      let tempDataInfo: TempDataInfo
 
       if (tempRecords && tempRecords.length > 0) {
-        const mergeResult = mergeTemperatureData(telemetry, tempRecords)
+        const mergeResult = mergeTemperatureData(telemetry, tempRecords, tempFile?.name)
         telemetry = mergeResult.telemetry
         allWarnings.push(...mergeResult.warnings)
+        tempDataInfo = mergeResult.tempDataInfo
       } else {
         allWarnings.push('未上传温度记录，将使用行程文件中的温度数据进行分析')
+        tempDataInfo = {
+          source: 'trip_builtin',
+          totalPoints: telemetry.length,
+          matchedPoints: 0,
+          description: '未上传温度记录文件，使用行程文件自带温度数据'
+        }
       }
 
       const segments = generateSegments(telemetry)
@@ -207,7 +240,8 @@ const ImportPanel: React.FC<ImportPanelProps> = ({ onTripLoaded, onLoadDemo }) =
         targetTemp: tripFileData.targetTemp,
         nodes: tripFileData.nodes,
         telemetry,
-        segments
+        segments,
+        tempDataInfo
       }
 
       setTimeout(() => {
@@ -377,6 +411,86 @@ const ImportPanel: React.FC<ImportPanelProps> = ({ onTripLoaded, onLoadDemo }) =
               <div className="temp-notice info-box">
                 <div className="info-title">💡 提示</div>
                 <p>未上传温度记录，将使用行程文件中的温度数据。温度记录文件可提供更精准的厢温分析和预冷判断。</p>
+              </div>
+            )}
+
+            {(tripFile?.valid || (tempFile && tempFile.valid)) && (
+              <div className="data-preview">
+                <h3 className="preview-title">📋 数据预览</h3>
+                <div className="preview-grid">
+                  {tripFileData && (
+                    <>
+                      <div className="preview-item">
+                        <span className="preview-label">运输路线</span>
+                        <span className="preview-value">{tripFileData.route}</span>
+                      </div>
+                      <div className="preview-item">
+                        <span className="preview-label">车牌号码</span>
+                        <span className="preview-value">{tripFileData.vehiclePlate}</span>
+                      </div>
+                      <div className="preview-item">
+                        <span className="preview-label">行程编号</span>
+                        <span className="preview-value">{tripFileData.id}</span>
+                      </div>
+                      <div className="preview-item">
+                        <span className="preview-label">节点数量</span>
+                        <span className="preview-value">{tripFileData.nodes.length} 个</span>
+                      </div>
+                      <div className="preview-item">
+                        <span className="preview-label">行程时段</span>
+                        <span className="preview-value">
+                          {new Date(tripFileData.departureTime).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                          {' ~ '}
+                          {new Date(tripFileData.arrivalTime).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      </div>
+                      <div className="preview-item">
+                        <span className="preview-label">目标温度</span>
+                        <span className="preview-value">{tripFileData.targetTemp}°C</span>
+                      </div>
+                      <div className="preview-item">
+                        <span className="preview-label">遥测数据点</span>
+                        <span className="preview-value">{tripFileData.telemetry.length} 条</span>
+                      </div>
+                    </>
+                  )}
+                  {tempRecords && tempRecords.length > 0 && (
+                    <>
+                      <div className="preview-item">
+                        <span className="preview-label">温度记录数</span>
+                        <span className="preview-value">{tempRecords.length} 条</span>
+                      </div>
+                      <div className="preview-item">
+                        <span className="preview-label">温度起止</span>
+                        <span className="preview-value">
+                          {new Date(tempRecords[0].time).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                          {' ~ '}
+                          {new Date(tempRecords[tempRecords.length - 1].time).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      </div>
+                      {tripFileData && (() => {
+                        const tripStart = tripFileData.departureTime
+                        const tripEnd = tripFileData.arrivalTime
+                        const tempStart = tempRecords[0].time
+                        const tempEnd = tempRecords[tempRecords.length - 1].time
+                        const overlapStart = Math.max(tripStart, tempStart)
+                        const overlapEnd = Math.min(tripEnd, tempEnd)
+                        const overlapDuration = Math.max(0, overlapEnd - overlapStart)
+                        const tripDuration = tripEnd - tripStart
+                        const coverage = tripDuration > 0 ? Math.round((overlapDuration / tripDuration) * 100) : 0
+                        return (
+                          <div className="preview-item">
+                            <span className="preview-label">时间覆盖率</span>
+                            <span className={`preview-value coverage-${coverage >= 80 ? 'good' : coverage >= 50 ? 'mid' : 'low'}`}>
+                              {coverage}%
+                              {coverage < 80 && ' ⚠'}
+                            </span>
+                          </div>
+                        )
+                      })()}
+                    </>
+                  )}
+                </div>
               </div>
             )}
           </div>

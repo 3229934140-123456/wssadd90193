@@ -70,7 +70,8 @@ export function analyzeTrip(trip: TripData): ReviewReport {
     electricDuration,
     standbyDuration,
     improvements,
-    suggestions
+    suggestions,
+    tempDataInfo: trip.tempDataInfo
   }
 }
 
@@ -265,6 +266,28 @@ export function generateReportText(trip: TripData, report: ReviewReport): string
     }
     lines.push('')
   })
+
+  lines.push('-'.repeat(60))
+  lines.push('温度数据来源')
+  lines.push('-'.repeat(60))
+  const sourceLabels: Record<string, string> = {
+    'separate_file': '独立温度文件',
+    'trip_builtin': '行程文件自带温度',
+    'partial_missing': '独立温度文件（部分区间未匹配）'
+  }
+  lines.push(`来源类型：${sourceLabels[report.tempDataInfo.source] || report.tempDataInfo.source}`)
+  if (report.tempDataInfo.fileName) {
+    lines.push(`文件名称：${report.tempDataInfo.fileName}`)
+  }
+  lines.push(`匹配情况：${report.tempDataInfo.matchedPoints} / ${report.tempDataInfo.totalPoints} 条`)
+  if (report.tempDataInfo.missingAtStart) {
+    lines.push(`前段缺失：约 ${report.tempDataInfo.missingAtStart} 分钟`)
+  }
+  if (report.tempDataInfo.missingAtEnd) {
+    lines.push(`后段缺失：约 ${report.tempDataInfo.missingAtEnd} 分钟`)
+  }
+  lines.push(`详细说明：${report.tempDataInfo.description}`)
+  lines.push('')
 
   lines.push('-'.repeat(60))
   lines.push('改进建议')

@@ -280,8 +280,159 @@
   margin: 0;
 }
 
+.data-preview {
+  background: #0f172a;
+  border: 1px solid #334155;
+  border-radius: 12px;
+  padding: 20px;
+  margin-top: -8px;
+}
+
+.preview-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #f1f5f9;
+  margin-bottom: 16px;
+}
+
+.preview-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px 20px;
+}
+
+.preview-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.preview-label {
+  font-size: 11px;
+  color: #64748b;
+}
+
+.preview-value {
+  font-size: 13px;
+  color: #e2e8f0;
+  font-weight: 500;
+  word-break: break-all;
+}
+
+.preview-value.coverage-good {
+  color: #10b981;
+}
+
+.preview-value.coverage-mid {
+  color: #f59e0b;
+}
+
+.preview-value.coverage-low {
+  color: #ef4444;
+}
+
 .temp-notice {
   margin-top: -8px;
+}
+
+.temp-source {
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+}
+
+.temp-source-separate_file {
+  background: rgba(16, 185, 129, 0.15);
+  color: #10b981;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.temp-source-trip_builtin {
+  background: rgba(245, 158, 11, 0.15);
+  color: #f59e0b;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.temp-source-partial_missing {
+  background: rgba(245, 158, 11, 0.15);
+  color: #f59e0b;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.temp-source-note {
+  margin-top: 4px;
+  font-size: 11px;
+  color: #94a3b8;
+  padding-left: 4px;
+}
+
+.temp-data-source-card {
+  background: #0f172a;
+  border: 1px solid #334155;
+  border-radius: 12px;
+  padding: 16px 20px;
+  margin-bottom: 24px;
+}
+
+.temp-data-source-card.temp-source-separate_file {
+  border-color: rgba(16, 185, 129, 0.3);
+}
+
+.temp-data-source-card.temp-source-trip_builtin,
+.temp-data-source-card.temp-source-partial_missing {
+  border-color: rgba(245, 158, 11, 0.3);
+}
+
+.temp-source-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.temp-source-icon {
+  font-size: 24px;
+}
+
+.temp-source-title {
+  font-size: 12px;
+  color: #64748b;
+  margin-bottom: 2px;
+}
+
+.temp-source-type {
+  font-size: 14px;
+  font-weight: 600;
+  color: #e2e8f0;
+}
+
+.temp-source-coverage {
+  margin-left: auto;
+  text-align: right;
+}
+
+.temp-source-coverage .coverage-label {
+  font-size: 11px;
+  color: #64748b;
+  margin-bottom: 2px;
+}
+
+.temp-source-coverage .coverage-value {
+  font-size: 13px;
+  font-weight: 600;
+  color: #38bdf8;
+}
+
+.temp-source-description {
+  font-size: 12px;
+  color: #94a3b8;
+  line-height: 1.5;
+  margin-bottom: 4px;
+}
+
+.temp-source-filename {
+  font-size: 11px;
+  color: #64748b;
 }
 
 .import-actions {

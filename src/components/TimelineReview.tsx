@@ -84,7 +84,17 @@ const TimelineReview: React.FC<TimelineReviewProps> = ({ tripData, report, onBac
               <span className="meta-item">
                 ⏱ {formatTimeShort(tripData.departureTime)} - {formatTimeShort(tripData.arrivalTime)}
               </span>
+              <span className={`meta-item temp-source temp-source-${tripData.tempDataInfo.source}`}>
+                {tripData.tempDataInfo.source === 'separate_file' ? '🌡 独立温度文件' :
+                 tripData.tempDataInfo.source === 'trip_builtin' ? '🌡 行程自带温度' :
+                 '🌡 部分区间未匹配'}
+              </span>
             </div>
+            {tripData.tempDataInfo.source !== 'separate_file' && (
+              <div className="temp-source-note">
+                {tripData.tempDataInfo.description}
+              </div>
+            )}
           </div>
         </div>
         <div className="header-right">

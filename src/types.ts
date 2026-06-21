@@ -2,6 +2,8 @@ export type CoolingMode = 'diesel' | 'electric' | 'standby' | 'off'
 
 export type TripNodeType = 'loading' | 'departure' | 'service' | 'unloading' | 'arrival'
 
+export type TempDataSource = 'separate_file' | 'trip_builtin' | 'partial_missing'
+
 export interface TripNode {
   id: string
   type: TripNodeType
@@ -20,6 +22,7 @@ export interface TelemetryPoint {
   doorOpen: boolean
   speed: number
   coolingPower: number
+  tempFromFile?: boolean
 }
 
 export interface TripSegment {
@@ -35,6 +38,16 @@ export interface TripSegment {
   description?: string
 }
 
+export interface TempDataInfo {
+  source: TempDataSource
+  fileName?: string
+  totalPoints: number
+  matchedPoints: number
+  missingAtStart?: number
+  missingAtEnd?: number
+  description: string
+}
+
 export interface TripData {
   id: string
   vehicleId: string
@@ -46,6 +59,7 @@ export interface TripData {
   nodes: TripNode[]
   telemetry: TelemetryPoint[]
   segments: TripSegment[]
+  tempDataInfo: TempDataInfo
 }
 
 export interface ImprovementItem {
@@ -71,4 +85,5 @@ export interface ReviewReport {
   standbyDuration: number
   improvements: ImprovementItem[]
   suggestions: string[]
+  tempDataInfo: TempDataInfo
 }

@@ -1,4 +1,4 @@
-import type { TripData, TripNode, TelemetryPoint, TripSegment, CoolingMode } from '../types'
+import type { TripData, TripNode, TelemetryPoint, TripSegment, CoolingMode, TempDataInfo } from '../types'
 
 function formatTime(date: Date): string {
   return date.toISOString().slice(11, 16)
@@ -155,6 +155,13 @@ export function generateMockTrip(): TripData {
 
   const segments: TripSegment[] = generateSegments(telemetry)
 
+  const tempDataInfo: TempDataInfo = {
+    source: 'trip_builtin',
+    totalPoints: telemetry.length,
+    matchedPoints: 0,
+    description: '示例数据，使用行程自带温度'
+  }
+
   return {
     id: 'trip-20240115-001',
     vehicleId: 'V-003',
@@ -165,7 +172,8 @@ export function generateMockTrip(): TripData {
     targetTemp: -18,
     nodes,
     telemetry,
-    segments
+    segments,
+    tempDataInfo
   }
 }
 

@@ -1,4 +1,5 @@
 import type { ParseResult } from './tripParser'
+import type { TempDataInfo, TempDataSource } from '../types'
 
 export interface TempRecord {
   time: number
@@ -66,8 +67,20 @@ function parseTempJson(content: string): ParseResult<TempRecord[]> {
       errors.push(`温度记录 [${idx}] 的 time 格式不正确`)
     }
 
-    if (item.compartmentTemp !== undefined && isNaN(Number(item.compartmentTemp))) {
-      errors.push(`温度记录 [${idx}] 的 compartmentTemp 不是有效数字`)
+    if (item.compartmentTemp !== undefined && item.compartmentTemp !== null && isNaN(Number(item.compartmentTemp))) {
+      errors.push(`温度记录 [${idx}] 的 compartmentTemp (厢温) 不是有效数字，值为: ${item.compartmentTemp}`)
+    }
+
+    if (item.outsideTemp !== undefined && item.outsideTemp !== null && item.outsideTemp !== '' && isNaN(Number(item.outsideTemp))) {
+      errors.push(`温度记录 [${idx}] 的 outsideTemp (外温) 不是有效数字，值为: ${item.outsideTemp}`)
+    }
+
+    if (item.probe1Temp !== undefined && item.probe1Temp !== null && item.probe1Temp !== '' && isNaN(Number(item.probe1Temp))) {
+      errors.push(`温度记录 [${idx}] 的 probe1Temp (探头1温度) 不是有效数字，值为: ${item.probe1Temp}`)
+    }
+
+    if (item.probe2Temp !== undefined && item.probe2Temp !== null && item.probe2Temp !== '' && isNaN(Number(item.probe2Temp))) {
+      errors.push(`温度记录 [${idx}] 的 probe2Temp (探头2温度) 不是有效数字，值为: ${item.probe2Temp}`)
     }
 
     if (errors.length > 20) return
@@ -136,28 +149,55 @@ function parseTempCsv(content: string): ParseResult<TempRecord[]> {
     const values = dataLines[i].split(',').map(v => v.trim())
 
     if (values.length < 2) {
-      warnings.push(`第 ${i + 2} 行数据列数不足，已跳过`)
+      errors.push(`第 ${i + 2} 行数据列数不足`)
       continue
     }
 
     const time = normalizeTimestamp(values[timeIdx])
     if (time === null) {
-      errors.push(`第 ${i + 2} 行的 time 格式不正确`)
+      errors.push(`第 ${i + 2} 行的 time 格式不正确，值为: ${values[timeIdx]}`)
       continue
     }
 
     const compartmentTemp = Number(values[compartmentIdx])
     if (isNaN(compartmentTemp)) {
-      errors.push(`第 ${i + 2} 行的厢温数据不是有效数字`)
+      errors.push(`第 ${i + 2} 行的 compartmentTemp (厢温) 不是有效数字，值为: ${values[compartmentIdx]}`)
       continue
+    }
+
+    let outsideTemp: number | undefined = undefined
+    if (outsideIdx !== -1 && values[outsideIdx] !== '') {
+      outsideTemp = Number(values[outsideIdx])
+      if (isNaN(outsideTemp)) {
+        errors.push(`第 ${i + 2} 行的 outsideTemp (外温) 不是有效数字，值为: ${values[outsideIdx]}`)
+        continue
+      }
+    }
+
+    let probe1Temp: number | undefined = undefined
+    if (probe1Idx !== -1 && values[probe1Idx] !== '') {
+      probe1Temp = Number(values[probe1Idx])
+      if (isNaN(probe1Temp)) {
+        errors.push(`第 ${i + 2} 行的 probe1Temp (探头1温度) 不是有效数字，值为: ${values[probe1Idx]}`)
+        continue
+      }
+    }
+
+    let probe2Temp: number | undefined = undefined
+    if (probe2Idx !== -1 && values[probe2Idx] !== '') {
+      probe2Temp = Number(values[probe2Idx])
+      if (isNaN(probe2Temp)) {
+        errors.push(`第 ${i + 2} 行的 probe2Temp (探头2温度) 不是有效数字，值为: ${values[probe2Idx]}`)
+        continue
+      }
     }
 
     records.push({
       time,
       compartmentTemp,
-      outsideTemp: outsideIdx !== -1 && values[outsideIdx] ? Number(values[outsideIdx]) : undefined,
-      probe1Temp: probe1Idx !== -1 && values[probe1Idx] ? Number(values[probe1Idx]) : undefined,
-      probe2Temp: probe2Idx !== -1 && values[probe2Idx] ? Number(values[probe2Idx]) : undefined
+      outsideTemp,
+      probe1Temp,
+      probe2Temp
     })
   }
 
@@ -201,13 +241,20 @@ function normalizeTimestamp(value: any): number | null {
 
 export function mergeTemperatureData(
   telemetry: any[],
-  tempRecords: TempRecord[]
-): { telemetry: any[]; warnings: string[] } {
+  tempRecords: TempRecord[],
+  tempFileName?: string
+): { telemetry: any[]; warnings: string[]; tempDataInfo: TempDataInfo } {
   const warnings: string[] = []
 
   if (tempRecords.length === 0) {
     warnings.push('温度记录为空，未进行合并')
-    return { telemetry, warnings }
+    const tempDataInfo: TempDataInfo = {
+      source: 'trip_builtin',
+      totalPoints: telemetry.length,
+      matchedPoints: 0,
+      description: '温度记录为空，使用行程文件自带温度数据'
+    }
+    return { telemetry, warnings, tempDataInfo }
   }
 
   const tripStart = telemetry[0]?.time || 0
@@ -215,18 +262,16 @@ export function mergeTemperatureData(
   const tempStart = tempRecords[0].time
   const tempEnd = tempRecords[tempRecords.length - 1].time
 
-  if (tempEnd < tripStart || tempStart > tripEnd) {
-    warnings.push('温度记录的时间范围与行程数据不重叠，无法合并')
-    return { telemetry, warnings }
-  }
+  let missingAtStart = 0
+  let missingAtEnd = 0
 
   if (tempStart > tripStart) {
-    const diffMin = (tempStart - tripStart) / 60000
-    warnings.push(`温度记录比行程晚开始约 ${Math.round(diffMin)} 分钟，前段数据无温度记录`)
+    missingAtStart = Math.round((tempStart - tripStart) / 60000)
+    warnings.push(`温度记录比行程晚开始约 ${missingAtStart} 分钟，前段数据无温度记录`)
   }
   if (tempEnd < tripEnd) {
-    const diffMin = (tripEnd - tempEnd) / 60000
-    warnings.push(`温度记录比行程早结束约 ${Math.round(diffMin)} 分钟，后段数据无温度记录`)
+    missingAtEnd = Math.round((tripEnd - tempEnd) / 60000)
+    warnings.push(`温度记录比行程早结束约 ${missingAtEnd} 分钟，后段数据无温度记录`)
   }
 
   const mergedTelemetry = telemetry.map(point => {
@@ -235,24 +280,49 @@ export function mergeTemperatureData(
       return {
         ...point,
         compartmentTemp: tempRecord.compartmentTemp,
-        outsideTemp: tempRecord.outsideTemp !== undefined ? tempRecord.outsideTemp : point.outsideTemp
+        outsideTemp: tempRecord.outsideTemp !== undefined ? tempRecord.outsideTemp : point.outsideTemp,
+        tempFromFile: true
       }
     }
-    return point
+    return { ...point, tempFromFile: false }
   })
 
-  let mergedCount = 0
-  for (let i = 0; i < mergedTelemetry.length; i++) {
-    if (mergedTelemetry[i].compartmentTemp !== telemetry[i].compartmentTemp) {
-      mergedCount++
-    }
+  let matchedCount = 0
+  for (const p of mergedTelemetry) {
+    if (p.tempFromFile) matchedCount++
   }
 
-  if (mergedCount > 0) {
-    warnings.push(`已成功合并 ${mergedCount} 条温度数据点`)
+  let source: TempDataSource = 'separate_file'
+  let description = ''
+
+  if (matchedCount === 0) {
+    source = 'trip_builtin'
+    description = '温度记录与行程时间不重叠，使用行程文件自带温度数据'
+  } else if (matchedCount < telemetry.length) {
+    source = 'partial_missing'
+    const missingCount = telemetry.length - matchedCount
+    description = `使用独立温度文件（${tempFileName || '未知文件'}），${matchedCount}/${telemetry.length} 条数据匹配成功，${missingCount} 条未匹配使用行程自带温度`
+  } else {
+    description = `使用独立温度文件（${tempFileName || '未知文件'}），全部 ${matchedCount} 条数据匹配成功`
   }
 
-  return { telemetry: mergedTelemetry, warnings }
+  if (matchedCount > 0 && matchedCount < telemetry.length) {
+    warnings.push(`已成功合并 ${matchedCount} 条温度数据点，${telemetry.length - matchedCount} 条未匹配`)
+  } else if (matchedCount > 0) {
+    warnings.push(`已成功合并全部 ${matchedCount} 条温度数据点`)
+  }
+
+  const tempDataInfo: TempDataInfo = {
+    source,
+    fileName: tempFileName,
+    totalPoints: telemetry.length,
+    matchedPoints: matchedCount,
+    missingAtStart: missingAtStart > 0 ? missingAtStart : undefined,
+    missingAtEnd: missingAtEnd > 0 ? missingAtEnd : undefined,
+    description
+  }
+
+  return { telemetry: mergedTelemetry, warnings, tempDataInfo }
 }
 
 function findClosestTempRecord(time: number, tempRecords: TempRecord[]): TempRecord | null {

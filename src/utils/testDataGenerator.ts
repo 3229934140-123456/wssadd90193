@@ -1,4 +1,4 @@
-import type { TripData, CoolingMode } from '../types'
+import type { TripData, CoolingMode, TempDataInfo } from '../types'
 import { generateSegments } from './tripParser'
 
 export function generateTestTrip(route: string = '广州 → 深圳'): TripData {
@@ -98,9 +98,17 @@ export function generateTestTrip(route: string = '广州 → 深圳'): TripData 
 
   const segments = generateSegments(telemetry)
 
+  const tempDataInfo: TempDataInfo = {
+    source: 'trip_builtin',
+    totalPoints: telemetry.length,
+    matchedPoints: 0,
+    description: '测试数据，使用行程自带温度'
+  }
+
   return {
     ...tripFileData,
-    segments
+    segments,
+    tempDataInfo
   }
 }
 
